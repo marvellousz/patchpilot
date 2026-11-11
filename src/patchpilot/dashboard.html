@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PatchPilot AI</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #090b16; --panel: #11142a; --panel-2: #171b36; --border: #262b52;
+    --text: #e6e8f5; --muted: #8a90b8; --purple: #8b5cf6; --blue: #0ea5e9;
+    --green: #22c55e; --red: #ef4444; --amber: #f59e0b;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--blue); }
+  h1.logo { margin: 0; font-size: 20px; letter-spacing: .02em; } h1.logo span { color: var(--blue); }
+
+  /* forms */
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 6px; letter-spacing: .03em; }
+  input[type=text], input[type=email], input[type=password] {
+    width: 100%; padding: 10px 12px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; font: inherit;
+  }
+  input:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 246, .2); }
+  button { font: inherit; cursor: pointer; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); }
+  button:hover { border-color: var(--purple); }
+  button.primary { background: linear-gradient(135deg, var(--purple), var(--blue)); border: none; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); }
+  button.danger:hover { border-color: var(--red); color: var(--red); }
+  button:disabled { opacity: .5; cursor: default; filter: none; }
+  .error { color: var(--red); min-height: 1.5em; margin-top: 10px; font-size: 13px; }
+  .hint { color: var(--muted); font-size: 12px; }
+
+  /* sign in */
+  #auth { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+  .auth-card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
+  .auth-card p { color: var(--muted); margin: 6px 0 20px; }
+  .tabs { display: flex; gap: 4px; background: var(--bg); border-radius: 10px; padding: 4px; }
+  .tabs button { flex: 1; border: none; background: transparent; color: var(--muted); }
+  .tabs button.on { background: var(--panel-2); color: var(--text); }
+  .auth-card button.primary { width: 100%; margin-top: 18px; padding: 10px; }
+
+  /* app shell */
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--border); }
+  header .who { margin-left: auto; color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 59px); }
+  aside { border-right: 1px solid var(--border); overflow-y: auto; }
+  .side-h { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--purple); }
+  .side-h button { padding: 2px 10px; font-size: 12px; }
+  .item { display: block; padding: 10px 16px; border-bottom: 1px solid var(--border); color: inherit; text-decoration: none; }
+  .item:hover, .item.active { background: var(--panel); }
+  .item .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .meta { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; }
+  .side-empty { color: var(--muted); font-size: 13px; padding: 8px 16px 12px; }
+  .badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .s-fixed { color: var(--green); } .s-running, .s-queued { color: var(--blue); } .s-escalated { color: var(--amber); }
+  .s-failed, .s-incomplete { color: var(--red); }
+  #view { padding: 24px; overflow-y: auto; min-width: 0; }
+  #view h2 { margin: 0 0 4px; font-size: 18px; }
+  .sub { color: var(--muted); margin-bottom: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+  .card h3 { margin: 0 0 12px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--purple); }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  .narrow { max-width: 560px; }
+
+  /* connect repo */
+  .perm { margin: 12px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+  .perm b { color: var(--text); font-weight: 600; }
+  .actions { display: flex; gap: 10px; margin-top: 18px; }
+
+  /* repo + issues */
+  .repo-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .repo-head .grow { flex: 1; min-width: 200px; }
+  .toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+  .toggle { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; margin: 0; font-weight: 400; letter-spacing: 0; }
+  .toggle input { accent-color: var(--purple); }
+  .issue { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .issue:last-child { border-bottom: none; }
+  .issue .grow { flex: 1; min-width: 0; }
+  .issue .title { font-weight: 600; color: var(--text); text-decoration: none; }
+  .issue .title:hover { color: var(--blue); }
+  .issue .meta { color: var(--muted); font-size: 12px; margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: 11px; padding: 0 7px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); }
+  .issue button { white-space: nowrap; }
+
+  /* run detail */
+  .stages { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .stage { padding: 10px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); min-width: 110px; text-align: center; }
+  .stage b { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  .stage small { color: var(--muted); }
+  .stage.done { border-color: var(--purple); box-shadow: 0 0 12px rgba(139, 92, 246, .25); }
+  .stage.done b { color: var(--purple); }
+  .stage.active { border-color: var(--blue); animation: pulse 1.6s infinite; }
+  .stage.active b { color: var(--blue); }
+  .stage.stopped { border-color: var(--amber); } .stage.stopped b { color: var(--amber); }
+  .stage.final.done { border-color: var(--green); box-shadow: 0 0 12px rgba(34, 197, 94, .3); }
+  .stage.final.done b { color: var(--green); }
+  .arrow { color: var(--purple); }
+  @keyframes pulse { 50% { box-shadow: 0 0 16px rgba(14, 165, 233, .45); } }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  #log { font: 12px/1.6 var(--mono); max-height: 60vh; overflow-y: auto; }
+  #log div { white-space: pre-wrap; word-break: break-word; padding: 1px 0; }
+  #log .n { color: var(--muted); display: inline-block; width: 2.5em; }
+  #log .gate { color: var(--amber); } #log .gate.ok { color: var(--green); } #log .gate.bad { color: var(--red); }
+  #log .think { color: var(--muted); }
+  #report { max-height: 60vh; overflow-y: auto; }
+  #report pre { background: var(--bg); padding: 10px; border-radius: 8px; overflow-x: auto; font: 12px/1.5 var(--mono); }
+  #report code { font-family: var(--mono); }
+  #report table { border-collapse: collapse; } #report td, #report th { border: 1px solid var(--border); padding: 4px 8px; }
+
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; } aside { border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
+    .cols { grid-template-columns: 1fr; } #view { padding: 16px; } header { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="auth" hidden>
+  <form class="auth-card" id="auth-form">
+    <h1 class="logo">PatchPilot <span>AI</span></h1>
+    <p>From GitHub issue to a tested, review-ready pull request.</p>
+    <div class="tabs"><button type="button" data-mode="login" class="on">Log in</button><button type="button" data-mode="signup">Sign up</button></div>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="email" required>
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <div id="invite-field" hidden>
+      <label for="invite">Invite code</label>
+      <input id="invite" type="text" autocomplete="off">
+    </div>
+    <button class="primary" type="submit" id="auth-submit">Log in</button>
+    <div class="error" id="auth-error"></div>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <h1 class="logo">PatchPilot <span>AI</span></h1>
+    <span class="who" id="who"></span>
+    <button id="logout">Log out</button>
+  </header>
+  <main>
+    <aside>
+      <div class="side-h">Repositories <button id="add-repo">+ Connect</button></div>
+      <div id="repos"></div>
+      <div class="side-h">Runs</div>
+      <div id="runs"></div>
+    </aside>
+    <section id="view"></section>
+  </main>
+</div>
+
+<script>
+const STAGES = [["Issue", "analyze"], ["Reproduce", "failing test"], ["Fix", "code change"], ["Verify", "test gates"], ["Pull request", "ready for review"]];
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+let me = null, repos = [], runs = [], queued = [], issues = {}, issueErrors = {};
+let openPr = true, polling = null, knownRuns = null, awaiting = null;
+let lastSignature = null, lastReport = null, lastSidebar = null;
+
+async function api(path, {method = "GET", body} = {}) {
+  const res = await fetch(path, {method, headers: {"Content-Type": "application/json"}, body: body && JSON.stringify(body)});
+  if (res.status === 401 && me) { signedOut(); throw new Error("Signed out"); }
+  const data = (res.headers.get("content-type") || "").includes("json") ? await res.json() : await res.text();
+  if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : (res.status === 422 ? "Check the form fields" : res.statusText));
+  return data;
+}
+
+function route() {
+  const [view, id] = location.hash.slice(1).split("/");
+  return {view: view || "", id: id ? decodeURIComponent(id) : null};
+}
+
+/* ---------- sign in ---------- */
+
+let authMode = "login", inviteRequired = false;
+api("api/config").then(c => { inviteRequired = c.invite_required; }).catch(() => {});
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  authMode = b.dataset.mode;
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $("auth-submit").textContent = authMode === "login" ? "Log in" : "Create account";
+  $("password").autocomplete = authMode === "login" ? "current-password" : "new-password";
+  $("invite-field").hidden = !(authMode === "signup" && inviteRequired);
+  $("auth-error").textContent = "";
+});
+
+$("auth-form").onsubmit = async e => {
+  e.preventDefault();
+  $("auth-submit").disabled = true; $("auth-error").textContent = "";
+  try {
+    me = await api(`api/${authMode}`, {method: "POST", body: {email: $("email").value, password: $("password").value, invite: $("invite").value}});
+    $("password").value = "";
+    signedIn();
+  } catch (err) { $("auth-error").textContent = err.message; }
+  $("auth-submit").disabled = false;
+};
+
+$("logout").onclick = async () => { await api("api/logout", {method: "POST"}).catch(() => {}); signedOut(); };
+
+function signedOut() {
+  me = null; repos = []; runs = []; queued = []; issues = {}; knownRuns = null;
+  clearInterval(polling); polling = null;
+  $("app").hidden = true; $("auth").hidden = false; $("email").focus();
+}
+
+async function signedIn() {
+  $("auth").hidden = true; $("app").hidden = false;
+  $("who").textContent = me.email;
+  await loadRepos();
+  if (!route().view && repos.length) location.hash = `repo/${repos[0].id}`;
+  await refresh();
+  renderView();
+  polling = polling || setInterval(refresh, 2500);
+}
+
+/* ---------- data ---------- */
+
+async function loadRepos() { repos = await api("api/repos"); }
+
+async function refresh() {
+  if (!me) return;
+  try {
+    const data = await api("api/runs");
+    runs = data.runs; queued = data.queued;
+    if (knownRuns === null) knownRuns = new Set(runs.map(r => r.id));
+    // After "Fix", jump to the run as soon as the worker starts it.
+    const fresh = runs.find(r => !knownRuns.has(r.id));
+    runs.forEach(r => knownRuns.add(r.id));
+    if (awaiting && fresh && fresh.repo.toLowerCase() === awaiting.repo.toLowerCase() && fresh.number === awaiting.number) {
+      awaiting = null; location.hash = `run/${encodeURIComponent(fresh.id)}`; return;
+    }
+    renderSidebar();
+    const r = route();
+    if (r.view === "run") await renderRun(r.id);
+  } catch (e) { console.error(e); }
+}
+
+function latestRun(repo, number) {
+  if (queued.some(q => q.repo.toLowerCase() === repo.toLowerCase() && q.number === number)) return {status: "queued"};
+  return runs.find(r => r.repo.toLowerCase() === repo.toLowerCase() && r.number === number);
+}
+
+/* ---------- sidebar ---------- */
+
+function renderSidebar() {
+  const r = route();
+  const sig = JSON.stringify([r, repos, runs, queued]);
+  if (sig === lastSidebar) return;
+  lastSidebar = sig;
+  $("repos").innerHTML = repos.map(repo => `
+    <a class="item ${r.view === "repo" && r.id == repo.id ? "active" : ""}" href="#repo/${repo.id}">
+      <div class="title">${esc(repo.full_name)}</div>
+    </a>`).join("") || '<div class="side-empty">No repositories connected</div>';
+  $("runs").innerHTML = queued.map(q => `
+    <div class="item"><div class="title">#${esc(q.number)} ${esc(q.title)}</div>
+      <div class="meta"><span>${esc(q.repo)}</span><span class="badge s-queued">queued</span></div></div>`).join("")
+    + runs.map(run => `
+    <a class="item ${r.view === "run" && r.id === run.id ? "active" : ""}" href="#run/${encodeURIComponent(run.id)}">
+      <div class="title">#${esc(run.number)} ${esc(run.title)}</div>
+      <div class="meta"><span>${esc(run.repo)} · ${esc(run.started)}</span><span class="badge s-${esc(run.status)}">${esc(run.status)}</span></div>
+    </a>`).join("")
+    || (queued.length ? "" : '<div class="side-empty">No runs yet</div>');
+}
+
+/* ---------- views ---------- */
+
+function renderView() {
+  if (!me) return;
+  const r = route();
+  lastSignature = null; lastReport = null;
+  renderSidebar();
+  if (r.view === "connect") return renderConnect();
+  if (r.view === "repo") return renderRepo(r.id);
+  if (r.view === "run") return renderRun(r.id);
+  $("view").innerHTML = repos.length
+    ? '<div class="empty">Pick a repository or a run.</div>'
+    : `<div class="card narrow"><h3>Get started</h3>
+         <p>Connect a GitHub repository. PatchPilot lists its open issues, and you choose which one to fix.</p>
+         <button class="primary" onclick="location.hash='connect'">Connect a repository</button></div>`;
+}
+
+$("add-repo").onclick = () => { location.hash = "connect"; };
+window.addEventListener("hashchange", renderView);
+
+function renderConnect() {
+  $("view").innerHTML = `
+    <div class="narrow">
+      <h2>Connect a repository</h2>
+      <div class="sub">PatchPilot clones it, fixes issues on a new branch, and opens pull requests for you to review.</div>
+      <form class="card" id="connect-form">
+        <label for="repo-name">Repository</label>
+        <input id="repo-name" type="text" placeholder="owner/name or https://github.com/owner/name" required>
+        <label for="repo-token">Personal access token</label>
+        <input id="repo-token" type="password" placeholder="github_pat_…" autocomplete="off" required>
+        <div class="hint" style="margin-top:10px">Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>
+          with access to this repository only, and these permissions:</div>
+        <ul class="perm"><li><b>Contents</b>: read and write</li><li><b>Issues</b>: read and write</li><li><b>Pull requests</b>: read and write</li></ul>
+        <div class="hint" style="margin-top:10px">The token is encrypted on the server and never sent back to the browser or shown to the AI model.</div>
+        <div class="actions"><button class="primary" type="submit" id="connect-submit">Connect</button>
+          ${repos.length ? '<button type="button" onclick="history.back()">Cancel</button>' : ""}</div>
+        <div class="error" id="connect-error"></div>
+      </form>
+    </div>`;
+  $("repo-name").focus();
+  $("connect-form").onsubmit = async e => {
+    e.preventDefault();
+    $("connect-submit").disabled = true; $("connect-submit").textContent = "Checking with GitHub…"; $("connect-error").textContent = "";
+    try {
+      const repo = await api("api/repos", {method: "POST", body: {repo: $("repo-name").value, token: $("repo-token").value}});
+      await loadRepos();
+      delete issues[repo.id];
+      location.hash = `repo/${repo.id}`;
+    } catch (err) {
+      $("connect-error").textContent = err.message;
+      $("connect-submit").disabled = false; $("connect-submit").textContent = "Connect";
+    }
+  };
+}
+
+async function renderRepo(id) {
+  const repo = repos.find(x => x.id == id);
+  if (!repo) { $("view").innerHTML = '<div class="empty">Repository not found</div>'; return; }
+  drawRepo(repo);
+  if (!(repo.id in issues)) await loadIssues(repo);
+}
+
+async function loadIssues(repo) {
+  delete issueErrors[repo.id]; issues[repo.id] = null; drawRepo(repo);
+  try { issues[repo.id] = await api(`api/repos/${repo.id}/issues`); }
+  catch (err) { issues[repo.id] = []; issueErrors[repo.id] = err.message; }
+  if (route().view === "repo" && route().id == repo.id) drawRepo(repo);
+}
+
+function drawRepo(repo) {
+  const list = issues[repo.id];
+  let body;
+  if (list === null || list === undefined) body = '<div class="empty">Loading issues…</div>';
+  else if (issueErrors[repo.id]) body = `<div class="error">${esc(issueErrors[repo.id])}</div>`;
+  else if (!list.length) body = '<div class="empty">No open issues</div>';
+  else body = list.map(i => {
+    const run = latestRun(repo.full_name, i.number);
+    const busy = run && (run.status === "queued" || run.status === "running");
+    return `<div class="issue">
+      <div class="grow">
+        <a class="title" href="${esc(i.url)}" target="_blank" rel="noopener">#${i.number} ${esc(i.title)}</a>
+        <div class="meta"><span>by ${esc(i.author)}</span>${i.labels.map(l => `<span class="chip">${esc(l)}</span>`).join("")}
+          ${run ? (run.id ? `<a href="#run/${encodeURIComponent(run.id)}" class="badge s-${esc(run.status)}" style="text-decoration:none">${esc(run.status)}</a>` : `<span class="badge s-${esc(run.status)}">${esc(run.status)}</span>`) : ""}
+          ${run && run.pr ? `<a href="${esc(run.pr)}" target="_blank" rel="noopener">pull request</a>` : ""}</div>
+      </div>
+      <button class="primary" data-fix="${i.number}" ${busy ? "disabled" : ""}>${busy ? "In progress" : run ? "Run again" : "Fix with PatchPilot"}</button>
+    </div>`;
+  }).join("");
+
+  $("view").innerHTML = `
+    <div class="repo-head">
+      <div class="grow"><h2>${esc(repo.full_name)}</h2>
+        <div class="sub"><a href="https://github.com/${esc(repo.full_name)}" target="_blank" rel="noopener">GitHub</a> · token ending ${esc(repo.token_hint)}</div></div>
+      <button onclick="location.hash='connect'">Replace token</button>
+      <button class="danger" id="remove-repo">Disconnect</button>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <h3 style="margin:0">Open issues</h3>
+        <label class="toggle"><input type="checkbox" id="open-pr" ${openPr && me.can_open_pr ? "checked" : ""} ${me.can_open_pr ? "" : "disabled"}>
+          Open a pull request when fixed${me.can_open_pr ? "" : " (server is in dry-run mode)"}</label>
+        ${me.runs_left === null ? "" : `<span class="hint" style="margin-left:auto">${me.runs_left} ${me.runs_left === 1 ? "run" : "runs"} left today</span>`}
+        <button id="reload-issues" ${me.runs_left === null ? 'style="margin-left:auto"' : ""}>Refresh</button>
+      </div>
+      <div class="error" id="fix-error" style="min-height:0"></div>
+      ${body}
+    </div>`;
+
+  $("open-pr").onchange = e => { openPr = e.target.checked; };
+  $("reload-issues").onclick = () => loadIssues(repo);
+  $("remove-repo").onclick = async () => {
+    if (!confirm(`Disconnect ${repo.full_name}? Its token is deleted from PatchPilot.`)) return;
+    await api(`api/repos/${repo.id}`, {method: "DELETE"});
+    await loadRepos(); delete issues[repo.id];
+    location.hash = repos.length ? `repo/${repos[0].id}` : "";
+  };
+  document.querySelectorAll("[data-fix]").forEach(b => b.onclick = async () => {
+    const number = Number(b.dataset.fix);
+    b.disabled = true; b.textContent = "Queuing…";
+    try {
+      const res = await api(`api/repos/${repo.id}/issues/${number}/fix`, {method: "POST", body: {open_pr: openPr && me.can_open_pr}});
+      me.runs_left = res.runs_left;
+      awaiting = {repo: repo.full_name, number};
+      await refresh();
+      drawRepo(repo);
+    } catch (err) { $("fix-error").textContent = err.message; b.disabled = false; b.textContent = "Fix with PatchPilot"; }
+  });
+}
+
+// Redraw the open repo when run statuses change, without refetching its issues.
+let lastRepoRuns = null;
+setInterval(() => {
+  const r = route();
+  if (!me || r.view !== "repo") return;
+  const sig = JSON.stringify([runs.map(x => x.id + x.status), queued]);
+  if (sig === lastRepoRuns) return;
+  lastRepoRuns = sig;
+  const repo = repos.find(x => x.id == r.id);
+  if (repo && issues[repo.id]) drawRepo(repo);
+}, 2500);
+
+/* ---------- run detail ---------- */
+
+function stageState(run) {
+  const ev = run.events, has = (kind, pred = () => true) => ev.some(e => e.kind === kind && pred(e));
+  const done = [
+    has("issue"),
+    has("gate", e => e.gate === "symptom_match" && e.ok),
+    has("gate", e => e.gate === "fix" && e.ok),
+    has("gate", e => e.gate === "fix" && e.ok),
+    has("pr"),
+  ];
+  const next = done.indexOf(false);
+  return STAGES.map((_, i) => {
+    if (done[i]) return "done";
+    if (i !== next) return "";
+    if (run.status === "running") return "active";
+    if (run.status === "fixed") return "skipped";  // dry run: no PR opened
+    return "stopped";
+  });
+}
+
+function renderLog(events) {
+  return events.filter(e => e.kind === "step").map(e => {
+    let cls = e.type;
+    if (e.type === "gate") cls += /PASSED/.test(e.text) ? " ok" : (/REJECTED|blocked/.test(e.text) ? " bad" : "");
+    return `<div class="${esc(cls)}"><span class="n">${esc(e.step)}</span>${esc(e.type)}  ${esc(e.text)}</div>`;
+  }).join("") || '<div class="think">Waiting for the agent…</div>';
+}
+
+async function renderRun(id) {
+  let run;
+  try { run = await api(`api/runs/${encodeURIComponent(id)}`); }
+  catch { if (route().id === id) $("view").innerHTML = '<div class="empty">Run not found</div>'; return; }
+  if (route().view !== "run" || route().id !== id) return;  // navigated away while loading
+  const signature = `${run.id}:${run.events.length}:${run.status}`;
+  if (signature === lastSignature) return;  // nothing new; keep scroll positions
+  lastSignature = signature;
+  const states = stageState(run);
+  const issueUrl = (run.events.find(e => e.kind === "issue") || {}).url;
+  const logEl = $("log");
+  const atBottom = !logEl || logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 20;
+
+  $("view").innerHTML = `
+    <h2>#${esc(run.number)} ${esc(run.title)} <span class="badge s-${esc(run.status)}">${esc(run.status)}</span></h2>
+    <div class="sub">${esc(run.repo)} · started ${esc(run.started)}
+      ${issueUrl ? ` · <a href="${esc(issueUrl)}" target="_blank" rel="noopener">issue</a>` : ""}
+      ${run.pr ? ` · <a href="${esc(run.pr)}" target="_blank" rel="noopener">pull request</a>` : ""}</div>
+    <div class="stages">${STAGES.map(([name, hint], i) => `
+      ${i ? '<span class="arrow">→</span>' : ""}
+      <div class="stage ${states[i]} ${i === STAGES.length - 1 ? "final" : ""}"><b>${name}</b>
+        <small>${states[i] === "skipped" ? "dry run" : states[i] === "stopped" ? run.status : hint}</small></div>`).join("")}
+    </div>
+    <div class="cols">
+      <div class="card"><h3>Agent trace</h3><div id="log">${renderLog(run.events)}</div></div>
+      <div class="card"><h3>Proof pack</h3><div id="report"><div class="think">Appears when the run finishes.</div></div></div>
+    </div>`;
+
+  const log = $("log");
+  if (atBottom) log.scrollTop = log.scrollHeight;
+
+  if (run.status !== "running") {
+    if (lastReport === null) {
+      try { lastReport = await api(`api/runs/${encodeURIComponent(id)}/report`); } catch { lastReport = ""; }
+    }
+    if (lastReport && $("report")) {
+      // The report is generated by PatchPilot from repo content; escape raw HTML before rendering markdown.
+      $("report").innerHTML = window.marked
+        ? marked.parse(lastReport.replace(/</g, "&lt;"))
+        : `<pre>${esc(lastReport)}</pre>`;
+    }
+  }
+}
+
+/* ---------- boot ---------- */
+
+api("api/me").then(user => { me = user; signedIn(); }).catch(signedOut);
+</script>
+</body>
+</html>
